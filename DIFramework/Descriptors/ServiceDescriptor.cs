@@ -1,8 +1,8 @@
 using System;
+using DIFramework.Data;
 
-namespace DiFraemwork
+namespace DIFramework.Descriptors
 {
-    //contained dependency information
     public abstract class ServiceDescriptor
     {
         public Type ServiceType { get; set; }

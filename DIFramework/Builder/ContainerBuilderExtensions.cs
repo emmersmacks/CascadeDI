@@ -1,7 +1,8 @@
 ﻿using System;
-using DiFraemwork.Descriptors;
+using DIFramework.Data;
+using DIFramework.Descriptors.Impl;
 
-namespace DiFraemwork
+namespace DIFramework.Builder
 {
     public static class ContainerBuilderExtensions
 {
@@ -73,6 +74,9 @@ namespace DiFraemwork
         this IContainerBuilder builder) 
         => builder.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Scoped);
 
+    public static IContainerBuilder RegisterSingleton<TImplementation>(this IContainerBuilder builder)
+        => builder.RegisterType(typeof(TImplementation), typeof(TImplementation), Lifetime.Singleton);
+
     #endregion
 
     #region ByFunc
@@ -112,6 +116,32 @@ namespace DiFraemwork
         this IContainerBuilder builder,
         object instance)
         => builder.RegisterInstance(typeof(T), instance);
+
+    public static IContainerBuilder RegisterSingletonFor(this IContainerBuilder builder, object instance, params Type[] serviceTypes)
+    {
+        if (serviceTypes == null || serviceTypes.Length == 0)
+            throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
+
+        foreach (var service in serviceTypes)
+            builder.RegisterInstance(service, instance);
+
+        return builder;
+    }
+
+    public static IContainerBuilder RegisterSingletonFor(this IContainerBuilder builder, Type implementation, params Type[] serviceTypes)
+    {
+        if (implementation == null) throw new ArgumentNullException(nameof(implementation));
+        if (serviceTypes == null || serviceTypes.Length == 0)
+            throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
+
+        foreach (var service in serviceTypes)
+            builder.RegisterType(service, implementation, Lifetime.Singleton);
+
+        return builder;
+    }
+
+    public static IContainerBuilder RegisterSingletonFor<TImplementation>(this IContainerBuilder builder, params Type[] serviceTypes)
+        => builder.RegisterSingletonFor(typeof(TImplementation), serviceTypes);
 
     #endregion
 }

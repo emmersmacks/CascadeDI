@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DiFraemwork.Descriptors
+namespace DIFramework.Descriptors.Impl
 {
     public class TypeBasedServiceDescriptor : ServiceDescriptor
     {

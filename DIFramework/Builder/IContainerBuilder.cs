@@ -1,4 +1,7 @@
-namespace DiFraemwork
+using DIFramework.Container;
+using DIFramework.Descriptors;
+
+namespace DIFramework.Builder
 {
     public interface IContainerBuilder
     {

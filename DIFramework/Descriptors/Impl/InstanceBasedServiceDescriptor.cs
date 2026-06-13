@@ -1,6 +1,7 @@
 using System;
+using DIFramework.Data;
 
-namespace DiFraemwork.Descriptors
+namespace DIFramework.Descriptors.Impl
 {
     public class InstanceBasedServiceDescriptor : ServiceDescriptor
     {

@@ -1,4 +1,4 @@
-namespace DiFraemwork
+namespace DIFramework.Data
 {
     public enum Lifetime
     {
