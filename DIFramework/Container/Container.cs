@@ -209,7 +209,7 @@ namespace DIFramework.Container
             var argsForConstructor = new object[parameters.Length];
             for (int i = 0; i < parameters.Length; i++)
             {
-                if (parameters[i].ParameterType is IScope)
+                if (parameters[i].ParameterType == typeof(IScope))
                 {
                     argsForConstructor[i] = scope;
                 }
