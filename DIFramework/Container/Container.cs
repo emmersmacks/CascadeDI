@@ -213,6 +213,10 @@ namespace DIFramework.Container
                 {
                     argsForConstructor[i] = scope;
                 }
+                if (parameters[i].ParameterType == typeof(IContainer))
+                {
+                    argsForConstructor[i] = this;
+                }
                 else
                 {
                     argsForConstructor[i] = CreateInstance(parameters[i].ParameterType, scope);
