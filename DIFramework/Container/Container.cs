@@ -21,8 +21,8 @@ namespace DIFramework.Container
                 _container = container;
             }
     
-            public object Resolve(Type service) 
-                => _container.CreateInstance(service, this);
+            public object Resolve(Type service, bool includeParent = true) 
+                => _container.CreateInstance(service, this, includeParent);
             
             internal bool TryGetScopedInstance(ServiceDescriptor descriptor, out object instance)
             {
@@ -35,7 +35,7 @@ namespace DIFramework.Container
             }
         }
     
-        internal object CreateInstance(Type service, IScope scope)
+        internal object CreateInstance(Type service, IScope scope, bool includeParent)
         {
             if (service.IsGenericType)
             {
@@ -47,7 +47,7 @@ namespace DIFramework.Container
                     || genDef == typeof(IList<>)
                     || genDef == typeof(ICollection<>))
                 {
-                    var descriptors = GetDescriptorsFor(arg);
+                    var descriptors = GetDescriptorsFor(arg, includeParent);
 
                     var listType = typeof(System.Collections.Generic.List<>).MakeGenericType(arg);
                     var list = (IList)Activator.CreateInstance(listType);
@@ -97,7 +97,7 @@ namespace DIFramework.Container
                                     .FirstOrDefault();
                                 if (inst == null)
                                 {
-                                    inst = CreateByType(impl, scope);
+                                    inst = CreateByType(impl, scope, includeParent);
                                     _singletonInstances[td] = inst;
                                 }
                             }
@@ -105,13 +105,13 @@ namespace DIFramework.Container
                             {
                                 if (!s2.TryGetScopedInstance(td, out inst))
                                 {
-                                    inst = CreateByType(impl, scope);
+                                    inst = CreateByType(impl, scope, includeParent);
                                     s2.SetScopedInstance(td, inst);
                                 }
                             }
                             else
                             {
-                                inst = CreateByType(impl, scope);
+                                inst = CreateByType(impl, scope, includeParent);
                             }
                         }
 
@@ -122,11 +122,11 @@ namespace DIFramework.Container
                 }
             }
 
-            var descriptorsForType = GetDescriptorsFor(service);
+            var descriptorsForType = GetDescriptorsFor(service, includeParent);
             if (descriptorsForType == null || descriptorsForType.Count == 0)
             {
-                if (_parent != null)
-                    return _parent.CreateInstance(service, scope);
+                if (_parent != null && includeParent)
+                    return _parent.CreateInstance(service, scope, includeParent);
 
                 return null;
             }
@@ -134,9 +134,9 @@ namespace DIFramework.Container
             var descriptor = descriptorsForType[descriptorsForType.Count - 1];
 
             if (!(_descriptors != null && _descriptors.TryGetValue(service, out var localList) && localList.Contains(descriptor))
-                && _parent != null)
+                && _parent != null && includeParent)
             {
-                return _parent.CreateInstance(service, scope);
+                return _parent.CreateInstance(service, scope, includeParent);
             }
 
             if (descriptor is InstanceBasedServiceDescriptor instanceDescriptor)
@@ -179,7 +179,7 @@ namespace DIFramework.Container
                     .FirstOrDefault();
                 if (inst == null)
                 {
-                    inst = CreateByType(implementation, scope);
+                    inst = CreateByType(implementation, scope, includeParent);
                     _singletonInstances[typeDescriptor] = inst;
                 }
                 return inst;
@@ -189,16 +189,16 @@ namespace DIFramework.Container
             {
                 if (!sss.TryGetScopedInstance(typeDescriptor, out var inst))
                 {
-                    inst = CreateByType(implementation, scope);
+                    inst = CreateByType(implementation, scope, includeParent);
                     sss.SetScopedInstance(typeDescriptor, inst);
                 }
                 return inst;
             }
 
-            return CreateByType(implementation, scope);
+            return CreateByType(implementation, scope, includeParent);
         }
 
-        private object CreateByType(Type implementation, IScope scope)
+        private object CreateByType(Type implementation, IScope scope, bool includeParent)
         {
             var constructors = implementation.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
             if (constructors.Length == 0)
@@ -219,7 +219,7 @@ namespace DIFramework.Container
                 }
                 else
                 {
-                    argsForConstructor[i] = CreateInstance(parameters[i].ParameterType, scope);
+                    argsForConstructor[i] = CreateInstance(parameters[i].ParameterType, scope, includeParent);
                 }
             }
 
@@ -254,13 +254,13 @@ namespace DIFramework.Container
             return new ContainerBuilder(this);
         }
 
-        internal List<ServiceDescriptor> GetDescriptorsFor(Type serviceType)
+        internal List<ServiceDescriptor> GetDescriptorsFor(Type serviceType, bool includeParent)
         {
             var result = new List<ServiceDescriptor>();
             if (_descriptors != null && _descriptors.TryGetValue(serviceType, out var list))
                 result.AddRange(list);
-            if (_parent != null)
-                result.AddRange(_parent.GetDescriptorsFor(serviceType));
+            if (_parent != null && includeParent)
+                result.AddRange(_parent.GetDescriptorsFor(serviceType, includeParent));
             return result;
         }
     }
