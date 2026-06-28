@@ -26,16 +26,15 @@ namespace DIFramework.Container
     
         internal object CreateInstance(Type service, IScope scope)
         {
-            // handle collection types like IEnumerable<T>, List<T>, IList<T>, ICollection<T>
             if (service.IsGenericType)
             {
                 var genDef = service.GetGenericTypeDefinition();
                 var arg = service.GetGenericArguments()[0];
 
-                if (genDef == typeof(System.Collections.Generic.IEnumerable<>)
-                    || genDef == typeof(System.Collections.Generic.List<>)
-                    || genDef == typeof(System.Collections.Generic.IList<>)
-                    || genDef == typeof(System.Collections.Generic.ICollection<>))
+                if (genDef == typeof(IEnumerable<>)
+                    || genDef == typeof(List<>)
+                    || genDef == typeof(IList<>)
+                    || genDef == typeof(ICollection<>))
                 {
                     var descriptors = GetDescriptorsFor(arg);
 
@@ -80,10 +79,9 @@ namespace DIFramework.Container
                 if (_parent != null)
                     return _parent.CreateInstance(service, scope);
 
-                throw new InvalidOperationException();
+                return null;
             }
 
-            // resolve single service - pick last registered (highest precedence)
             var descriptor = descriptorsForType[descriptorsForType.Count - 1];
 
             if (descriptor is InstanceBasedServiceDescriptor instanceDescriptor)
@@ -136,7 +134,6 @@ namespace DIFramework.Container
             return new ContainerBuilder(this);
         }
 
-        // returns descriptors for a service type from this container and parents (this first)
         internal List<ServiceDescriptor> GetDescriptorsFor(Type serviceType)
         {
             var result = new List<ServiceDescriptor>();
