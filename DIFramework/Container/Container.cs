@@ -14,6 +14,7 @@ namespace DIFramework.Container
         private class Scope : IScope
         {
             private readonly Container _container;
+            private readonly Dictionary<ServiceDescriptor, object> _scopedInstances = new Dictionary<ServiceDescriptor, object>();
             
             public Scope(Container container)
             {
@@ -22,6 +23,16 @@ namespace DIFramework.Container
     
             public object Resolve(Type service) 
                 => _container.CreateInstance(service, this);
+            
+            internal bool TryGetScopedInstance(ServiceDescriptor descriptor, out object instance)
+            {
+                return _scopedInstances.TryGetValue(descriptor, out instance);
+            }
+
+            internal void SetScopedInstance(ServiceDescriptor descriptor, object instance)
+            {
+                _scopedInstances[descriptor] = instance;
+            }
         }
     
         internal object CreateInstance(Type service, IScope scope)
@@ -45,24 +56,57 @@ namespace DIFramework.Container
                     {
                         object inst;
                         if (d is InstanceBasedServiceDescriptor id)
+                        {
                             inst = id.Instance;
+                        }
                         else if (d is FactoryBasedServiceDescriptor fd)
-                            inst = fd.Factory(scope);
+                        {
+                            if (fd.Lifetime == Data.Lifetime.Singleton)
+                            {
+                                if (!_singletonInstances.TryGetValue(fd, out inst))
+                                {
+                                    inst = fd.Factory(scope);
+                                    _singletonInstances[fd] = inst;
+                                }
+                            }
+                            else if (fd.Lifetime == Data.Lifetime.Scoped && scope is Scope s)
+                            {
+                                if (!s.TryGetScopedInstance(fd, out inst))
+                                {
+                                    inst = fd.Factory(scope);
+                                    s.SetScopedInstance(fd, inst);
+                                }
+                            }
+                            else
+                            {
+                                inst = fd.Factory(scope);
+                            }
+                        }
                         else
                         {
                             var td = d as TypeBasedServiceDescriptor;
                             var impl = td.ImplementationType;
-                            var ctors = impl.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
-                            if (ctors.Length == 0)
-                                inst = Activator.CreateInstance(impl);
+
+                            // type-based descriptor lifetimes
+                            if (td.Lifetime == Data.Lifetime.Singleton)
+                            {
+                                if (!_singletonInstances.TryGetValue(td, out inst))
+                                {
+                                    inst = CreateByType(impl, scope);
+                                    _singletonInstances[td] = inst;
+                                }
+                            }
+                            else if (td.Lifetime == Data.Lifetime.Scoped && scope is Scope s2)
+                            {
+                                if (!s2.TryGetScopedInstance(td, out inst))
+                                {
+                                    inst = CreateByType(impl, scope);
+                                    s2.SetScopedInstance(td, inst);
+                                }
+                            }
                             else
                             {
-                                var ctor = ctors.Single();
-                                var ps = ctor.GetParameters();
-                                var args = new object[ps.Length];
-                                for (int i = 0; i < ps.Length; i++)
-                                    args[i] = CreateInstance(ps[i].ParameterType, scope);
-                                inst = ctor.Invoke(args);
+                                inst = CreateByType(impl, scope);
                             }
                         }
 
@@ -84,14 +128,68 @@ namespace DIFramework.Container
 
             var descriptor = descriptorsForType[descriptorsForType.Count - 1];
 
+            if (!(_descriptors != null && _descriptors.TryGetValue(service, out var localList) && localList.Contains(descriptor))
+                && _parent != null)
+            {
+                return _parent.CreateInstance(service, scope);
+            }
+
             if (descriptor is InstanceBasedServiceDescriptor instanceDescriptor)
                 return instanceDescriptor.Instance;
+
             if (descriptor is FactoryBasedServiceDescriptor factoryDescriptor)
+            {
+                if (factoryDescriptor.Lifetime == Data.Lifetime.Singleton)
+                {
+                    if (!_singletonInstances.TryGetValue(factoryDescriptor, out var inst))
+                    {
+                        inst = factoryDescriptor.Factory(scope);
+                        _singletonInstances[factoryDescriptor] = inst;
+                    }
+                    return inst;
+                }
+
+                if (factoryDescriptor.Lifetime == Data.Lifetime.Scoped && scope is Scope ss)
+                {
+                    if (!ss.TryGetScopedInstance(factoryDescriptor, out var inst))
+                    {
+                        inst = factoryDescriptor.Factory(scope);
+                        ss.SetScopedInstance(factoryDescriptor, inst);
+                    }
+                    return inst;
+                }
+
                 return factoryDescriptor.Factory(scope);
+            }
 
             var typeDescriptor = descriptor as TypeBasedServiceDescriptor;
             var implementation = typeDescriptor.ImplementationType;
 
+            if (typeDescriptor.Lifetime == Data.Lifetime.Singleton)
+            {
+                if (!_singletonInstances.TryGetValue(typeDescriptor, out var inst))
+                {
+                    inst = CreateByType(implementation, scope);
+                    _singletonInstances[typeDescriptor] = inst;
+                }
+                return inst;
+            }
+
+            if (typeDescriptor.Lifetime == Data.Lifetime.Scoped && scope is Scope sss)
+            {
+                if (!sss.TryGetScopedInstance(typeDescriptor, out var inst))
+                {
+                    inst = CreateByType(implementation, scope);
+                    sss.SetScopedInstance(typeDescriptor, inst);
+                }
+                return inst;
+            }
+
+            return CreateByType(implementation, scope);
+        }
+
+        private object CreateByType(Type implementation, IScope scope)
+        {
             var constructors = implementation.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
             if (constructors.Length == 0)
                 return Activator.CreateInstance(implementation);
@@ -108,6 +206,7 @@ namespace DIFramework.Container
         }
     
         private Dictionary<Type, List<ServiceDescriptor>> _descriptors;
+        private readonly Dictionary<ServiceDescriptor, object> _singletonInstances = new Dictionary<ServiceDescriptor, object>();
         private readonly Container _parent;
     
         public Container(IEnumerable<ServiceDescriptor> descriptors, Container parent = null)
