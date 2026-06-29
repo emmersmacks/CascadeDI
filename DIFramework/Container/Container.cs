@@ -143,7 +143,7 @@ namespace DIFramework.Container
                 return null;
             }
 
-            var descriptor = descriptorsForType[descriptorsForType.Count - 1];
+            var descriptor = descriptorsForType[0];
 
             if (!(_descriptors != null && _descriptors.TryGetValue(service, out var localList) && localList.Contains(descriptor))
                 && _parent != null && collectParentDescriptors)
