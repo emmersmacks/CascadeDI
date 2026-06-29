@@ -1,4 +1,4 @@
-namespace DIFramework
+namespace CascadeDI
 {
     public static class ScopeExtensions
     {

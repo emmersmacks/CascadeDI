@@ -1,6 +1,6 @@
-using DIFramework.Builder;
+using CascadeDI.Builder;
 
-namespace DIFramework.Container
+namespace CascadeDI.Container
 {
     public interface IContainer
     {

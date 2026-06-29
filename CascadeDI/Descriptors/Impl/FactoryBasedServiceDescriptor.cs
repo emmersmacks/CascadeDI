@@ -1,6 +1,6 @@
 using System;
 
-namespace DIFramework.Descriptors.Impl
+namespace CascadeDI.Descriptors.Impl
 {
     public class FactoryBasedServiceDescriptor : ServiceDescriptor
     {

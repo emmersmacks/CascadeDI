@@ -1,7 +1,7 @@
 using System;
-using DIFramework.Data;
+using CascadeDI.Data;
 
-namespace DIFramework.Descriptors
+namespace CascadeDI.Descriptors
 {
     public abstract class ServiceDescriptor
     {

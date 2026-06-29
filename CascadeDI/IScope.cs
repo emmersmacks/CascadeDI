@@ -1,6 +1,6 @@
 using System;
 
-namespace DIFramework
+namespace CascadeDI
 {
     public interface IScope 
     {

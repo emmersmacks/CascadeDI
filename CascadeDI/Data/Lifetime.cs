@@ -1,4 +1,4 @@
-namespace DIFramework.Data
+namespace CascadeDI.Data
 {
     public enum Lifetime
     {

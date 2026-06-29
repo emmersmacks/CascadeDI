@@ -1,8 +1,8 @@
 ﻿using System;
-using DIFramework.Data;
-using DIFramework.Descriptors.Impl;
+using CascadeDI.Data;
+using CascadeDI.Descriptors.Impl;
 
-namespace DIFramework.Builder
+namespace CascadeDI.Builder
 {
     public static class ContainerBuilderExtensions
     {

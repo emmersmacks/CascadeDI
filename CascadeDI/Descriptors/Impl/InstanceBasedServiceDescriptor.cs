@@ -1,7 +1,7 @@
 using System;
-using DIFramework.Data;
+using CascadeDI.Data;
 
-namespace DIFramework.Descriptors.Impl
+namespace CascadeDI.Descriptors.Impl
 {
     public class InstanceBasedServiceDescriptor : ServiceDescriptor
     {

@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
-using DIFramework.Container;
-using DIFramework.Descriptors;
+using CascadeDI.Container;
+using CascadeDI.Descriptors;
 
-namespace DIFramework.Builder
+namespace CascadeDI.Builder
 {
     public class ContainerBuilder : IContainerBuilder
     {

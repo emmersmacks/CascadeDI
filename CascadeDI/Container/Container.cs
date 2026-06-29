@@ -1,13 +1,13 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Collections;
-using DIFramework.Builder;
-using DIFramework.Descriptors;
-using DIFramework.Descriptors.Impl;
+using CascadeDI.Builder;
+using CascadeDI.Descriptors;
+using CascadeDI.Descriptors.Impl;
 
-namespace DIFramework.Container
+namespace CascadeDI.Container
 {
     public class Container : IContainer
     {
