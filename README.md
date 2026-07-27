@@ -15,14 +15,16 @@ Installing as a unity module via a git link in the PackageManager or editing `Pa
 Example of service registration:
 
 ```csharp
-var builder = new ContainerBuilder();
-var container = builder
-        .RegisterSingleton<IService, Service>()
-        .RegisterSingleton<IController, Controller>()
-        .Build();
-    
+var container = new Container();
+container
+    .RegisterSingleton<IService, Service>()
+    .RegisterSingleton<IController, Controller>();
+
 var scope = container.CreateScope();
 var controller = scope.Resolve(typeof(IController));
+
+// Регистрация возможна и после того, как контейнер уже использовался:
+container.RegisterSingleton<IOtherService, OtherService>();
 ```
 
 ## API

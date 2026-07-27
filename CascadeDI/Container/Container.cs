@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using CascadeDI.Builder;
 using CascadeDI.Descriptors;
 using CascadeDI.Descriptors.Impl;
 
@@ -35,179 +34,138 @@ namespace CascadeDI.Container
             }
         }
         
-        private Dictionary<Type, List<ServiceDescriptor>> _descriptors;
+        private static readonly HashSet<Type> CollectionGenericDefinitions = new ()
+        {
+            typeof(IEnumerable<>), typeof(List<>), typeof(IList<>), typeof(ICollection<>)
+        };
+
+        private readonly Dictionary<Type, List<ServiceDescriptor>> _descriptors = new ();
         private readonly Dictionary<ServiceDescriptor, object> _singletonInstances = new ();
         private readonly Container _parent;
-        
-        public Container(IEnumerable<ServiceDescriptor> descriptors, Container parent = null)
+
+        public Container(Container parent = null)
         {
-            _descriptors = descriptors
-                .GroupBy(x => x.ServiceType)
-                .ToDictionary(g => g.Key, g => g.ToList());
             _parent = parent;
+        }
+
+        public void Register(ServiceDescriptor descriptor)
+        {
+            if (_descriptors.TryGetValue(descriptor.ServiceType, out var existing) && existing.Count > 0)
+            {
+                if (!descriptor.ServiceType.IsInterface)
+                    throw new InvalidOperationException(
+                        $"Service type '{descriptor.ServiceType}' is already registered on this container.");
+
+                existing.Add(descriptor);
+                return;
+            }
+
+            _descriptors[descriptor.ServiceType] = new List<ServiceDescriptor> { descriptor };
         }
     
         internal object CreateInstance(Type service, IScope scope, bool collectParentDescriptors = true)
         {
-            if (service.IsGenericType)
+            if (service.IsGenericType && CollectionGenericDefinitions.Contains(service.GetGenericTypeDefinition()))
             {
-                var genDef = service.GetGenericTypeDefinition();
-                var arg = service.GetGenericArguments()[0];
-
-                if (genDef == typeof(IEnumerable<>)
-                    || genDef == typeof(List<>)
-                    || genDef == typeof(IList<>)
-                    || genDef == typeof(ICollection<>))
-                {
-                    var descriptors = GetDescriptorsFor(arg, collectParentDescriptors);
-
-                    var listType = typeof(List<>).MakeGenericType(arg);
-                    var list = (IList)Activator.CreateInstance(listType);
-
-                    foreach (var d in descriptors)
-                    {
-                        object inst;
-                        if (d is InstanceBasedServiceDescriptor id)
-                        {
-                            inst = id.Instance;
-                        }
-                        else if (d is FactoryBasedServiceDescriptor fd)
-                        {
-                            if (fd.Lifetime == Data.Lifetime.Singleton)
-                            {
-                                if (!_singletonInstances.TryGetValue(fd, out inst))
-                                {
-                                    inst = fd.Factory(scope);
-                                    _singletonInstances[fd] = inst;
-                                }
-                            }
-                            else if (fd.Lifetime == Data.Lifetime.Scoped && scope is Scope s)
-                            {
-                                if (!s.TryGetScopedInstance(fd, out inst))
-                                {
-                                    inst = fd.Factory(scope);
-                                    s.SetScopedInstance(fd, inst);
-                                }
-                            }
-                            else
-                            {
-                                inst = fd.Factory(scope);
-                            }
-                        }
-                        else
-                        {
-                            var td = d as TypeBasedServiceDescriptor;
-                            var impl = td.ImplementationType;
-
-                            // type-based descriptor lifetimes
-                            if (td.Lifetime == Data.Lifetime.Singleton)
-                            {
-                                inst = _singletonInstances
-                                    .Where(p => p.Key is TypeBasedServiceDescriptor d &&
-                                                d.ImplementationType == impl)
-                                    .Select(p => p.Value)
-                                    .FirstOrDefault();
-                                if (inst == null)
-                                {
-                                    inst = CreateByType(impl, scope);
-                                    _singletonInstances[td] = inst;
-                                }
-                            }
-                            else if (td.Lifetime == Data.Lifetime.Scoped && scope is Scope s2)
-                            {
-                                if (!s2.TryGetScopedInstance(td, out inst))
-                                {
-                                    inst = CreateByType(impl, scope);
-                                    s2.SetScopedInstance(td, inst);
-                                }
-                            }
-                            else
-                            {
-                                inst = CreateByType(impl, scope);
-                            }
-                        }
-
-                        list.Add(inst);
-                    }
-
-                    return list;
-                }
+                var elementType = service.GetGenericArguments()[0];
+                return CreateCollectionInstance(elementType, scope, collectParentDescriptors);
             }
 
-            var descriptorsForType = GetDescriptorsFor(service, collectParentDescriptors);
-            if (descriptorsForType == null || descriptorsForType.Count == 0)
-            {
-                if (_parent != null && collectParentDescriptors)
-                    return _parent.CreateInstance(service, scope, true);
+            if (_descriptors.TryGetValue(service, out var localDescriptors) && localDescriptors.Count > 0)
+                return ResolveInstance(localDescriptors[0], scope);
 
-                return null;
-            }
-
-            var descriptor = descriptorsForType[0];
-
-            if (!(_descriptors != null && _descriptors.TryGetValue(service, out var localList) && localList.Contains(descriptor))
-                && _parent != null && collectParentDescriptors)
-            {
+            if (_parent != null && collectParentDescriptors)
                 return _parent.CreateInstance(service, scope, true);
-            }
 
-            if (descriptor is InstanceBasedServiceDescriptor instanceDescriptor)
-                return instanceDescriptor.Instance;
+            return null;
+        }
 
-            if (descriptor is FactoryBasedServiceDescriptor factoryDescriptor)
+        private object CreateCollectionInstance(Type elementType, IScope scope, bool collectParentDescriptors)
+        {
+            var descriptors = GetDescriptorsFor(elementType, collectParentDescriptors);
+
+            var listType = typeof(List<>).MakeGenericType(elementType);
+            var list = (IList)Activator.CreateInstance(listType);
+
+            foreach (var descriptor in descriptors)
+                list.Add(ResolveInstance(descriptor, scope));
+
+            return list;
+        }
+
+        private object ResolveInstance(ServiceDescriptor descriptor, IScope scope)
+        {
+            switch (descriptor)
             {
-                if (factoryDescriptor.Lifetime == Data.Lifetime.Singleton)
-                {
-                    if (!_singletonInstances.TryGetValue(factoryDescriptor, out var inst))
-                    {
-                        inst = factoryDescriptor.Factory(scope);
-                        _singletonInstances[factoryDescriptor] = inst;
-                    }
-                    return inst;
-                }
+                case InstanceBasedServiceDescriptor instanceDescriptor:
+                    return instanceDescriptor.Instance;
 
-                if (factoryDescriptor.Lifetime == Data.Lifetime.Scoped && scope is Scope ss)
-                {
-                    if (!ss.TryGetScopedInstance(factoryDescriptor, out var inst))
-                    {
-                        inst = factoryDescriptor.Factory(scope);
-                        ss.SetScopedInstance(factoryDescriptor, inst);
-                    }
-                    return inst;
-                }
+                case FactoryBasedServiceDescriptor factoryDescriptor:
+                    return ResolveWithLifetime(factoryDescriptor, scope, () => factoryDescriptor.Factory(scope));
 
-                return factoryDescriptor.Factory(scope);
+                case TypeBasedServiceDescriptor typeDescriptor:
+                    return ResolveTypeBasedInstance(typeDescriptor, scope);
+
+                default:
+                    throw new NotSupportedException($"Unsupported descriptor type '{descriptor.GetType()}'.");
             }
+        }
 
-            var typeDescriptor = descriptor as TypeBasedServiceDescriptor;
-            var implementation = typeDescriptor.ImplementationType;
-
-            if (typeDescriptor.Lifetime == Data.Lifetime.Singleton)
+        private object ResolveWithLifetime(ServiceDescriptor descriptor, IScope scope, Func<object> factory)
+        {
+            switch (descriptor.Lifetime)
             {
-                var inst = _singletonInstances
+                case Data.Lifetime.Singleton:
+                    if (!_singletonInstances.TryGetValue(descriptor, out var singleton))
+                    {
+                        singleton = factory();
+                        _singletonInstances[descriptor] = singleton;
+                    }
+                    return singleton;
+
+                case Data.Lifetime.Scoped when scope is Scope scopedContainer:
+                    if (!scopedContainer.TryGetScopedInstance(descriptor, out var scoped))
+                    {
+                        scoped = factory();
+                        scopedContainer.SetScopedInstance(descriptor, scoped);
+                    }
+                    return scoped;
+
+                default:
+                    return factory();
+            }
+        }
+
+        private object ResolveTypeBasedInstance(TypeBasedServiceDescriptor descriptor, IScope scope)
+        {
+            if (descriptor.Lifetime == Data.Lifetime.Singleton)
+            {
+                // Keyed by ImplementationType, not descriptor identity, so RegisterSingletonFor's
+                // multiple service-type registrations for the same implementation share one instance.
+                var instance = _singletonInstances
                     .Where(p => p.Key is TypeBasedServiceDescriptor d &&
-                                d.ImplementationType == implementation)
+                                d.ImplementationType == descriptor.ImplementationType)
                     .Select(p => p.Value)
                     .FirstOrDefault();
-                if (inst == null)
+                if (instance == null)
                 {
-                    inst = CreateByType(implementation, scope);
-                    _singletonInstances[typeDescriptor] = inst;
+                    instance = CreateByType(descriptor.ImplementationType, scope);
+                    _singletonInstances[descriptor] = instance;
                 }
-                return inst;
+                return instance;
             }
 
-            if (typeDescriptor.Lifetime == Data.Lifetime.Scoped && scope is Scope sss)
+            if (descriptor.Lifetime == Data.Lifetime.Scoped && scope is Scope scopedContainer)
             {
-                if (!sss.TryGetScopedInstance(typeDescriptor, out var inst))
+                if (!scopedContainer.TryGetScopedInstance(descriptor, out var scopedInstance))
                 {
-                    inst = CreateByType(implementation, scope);
-                    sss.SetScopedInstance(typeDescriptor, inst);
+                    scopedInstance = CreateByType(descriptor.ImplementationType, scope);
+                    scopedContainer.SetScopedInstance(descriptor, scopedInstance);
                 }
-                return inst;
+                return scopedInstance;
             }
 
-            return CreateByType(implementation, scope);
+            return CreateByType(descriptor.ImplementationType, scope);
         }
 
         private object CreateByType(Type implementation, IScope scope)
@@ -243,15 +201,9 @@ namespace CascadeDI.Container
             return new Scope(this);
         }
 
-        public IContainer CreateChild(IEnumerable<ServiceDescriptor> descriptors = null)
+        public IContainer CreateChild()
         {
-            var list = descriptors == null ? new List<ServiceDescriptor>() : new List<ServiceDescriptor>(descriptors);
-            return new Container(list, this);
-        }
-
-        public IContainerBuilder CreateChildBuilder()
-        {
-            return new ContainerBuilder(this);
+            return new Container(this);
         }
 
         internal List<ServiceDescriptor> GetDescriptorsFor(Type serviceType, bool includeParent)
