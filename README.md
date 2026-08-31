@@ -27,12 +27,32 @@ var controller = scope.Resolve(typeof(IController));
 container.RegisterSingleton<IOtherService, OtherService>();
 ```
 
-Every registration method accepts an optional `onCreate` callback, invoked with the created instance as soon as it is resolved for the first time (once per Singleton/Scoped instance, every time for Transient):
+Fluent (Zenject-style) registration, when a type needs to be exposed under several service types at once:
 
 ```csharp
-container.RegisterSingleton<IService, Service>(instance => instance.Init());
-container.RegisterTransientFor<Logger>(logger => logger.SetContext("startup"), typeof(ILogger));
-container.RegisterSingleton<IConfig>(existingConfigInstance, config => config.Reload());
+container
+    .Register<ShopWindow>()
+    .ToInterface<IWindow>()
+    .ToInterface<IInitializable>()
+    .AsSingleton();
+
+var scope = container.CreateScope();
+var window = scope.Resolve<IWindow>();
+var initializable = scope.Resolve<IInitializable>();
+// window and initializable share the same ShopWindow instance
+```
+
+Any registration can react right after its instance is created via `.OnCreate()`:
+
+```csharp
+container
+    .Register<ShopWindow>()
+    .ToInterface<IWindow>()
+    .OnCreate(window => window.Init())
+    .AsSingleton();
+
+container.RegisterSingleton<IService, Service>()
+    .OnCreate(service => service.Warmup());
 ```
 
 ## API
@@ -43,6 +63,8 @@ container.RegisterSingleton<IConfig>(existingConfigInstance, config => config.Re
 
 * **RegisterScoped (under development)** - registers an object specifically for the current scope.
 
-* **onCreate** - optional callback parameter on any Register* method, invoked with the newly created/resolved instance right after it comes into being (on first Resolve).
+* **Register\<TImplementation\>()** - starts a fluent registration for a concrete type. The type itself is always registered as a service; chain `.ToInterface<TInterface>()` to expose the same instance under additional service types, and finish with `.AsSingleton()`, `.AsTransient()` or `.AsScoped()` to commit the registration and pick the lifetime.
+
+* **OnCreate(callback)** - chainable off of any registration (fluent or classic). Runs the callback with the resolved instance right after it's created (once per instance, not on every resolve), for post-construction initialization without touching the constructor.
 
 Written thanks to the tutorial: https://www.youtube.com/watch?v=dCkYP03lXOs&t=1919s

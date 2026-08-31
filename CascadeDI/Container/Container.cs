@@ -32,6 +32,21 @@ namespace CascadeDI.Container
             {
                 _scopedInstances[descriptor] = instance;
             }
+
+            internal bool TryGetScopedInstanceByImplementation(Type implementationType, out object instance)
+            {
+                foreach (var pair in _scopedInstances)
+                {
+                    if (pair.Key is TypeBasedServiceDescriptor d && d.ImplementationType == implementationType)
+                    {
+                        instance = pair.Value;
+                        return true;
+                    }
+                }
+
+                instance = null;
+                return false;
+            }
         }
         
         private static readonly HashSet<Type> CollectionGenericDefinitions = new ()
@@ -159,11 +174,13 @@ namespace CascadeDI.Container
 
             if (descriptor.Lifetime == Data.Lifetime.Scoped && scope is Scope scopedContainer)
             {
-                if (!scopedContainer.TryGetScopedInstance(descriptor, out var scopedInstance))
+                // Keyed by ImplementationType (like the singleton branch above), so multiple
+                // service-type registrations for the same implementation share one instance per scope.
+                if (!scopedContainer.TryGetScopedInstanceByImplementation(descriptor.ImplementationType, out var scopedInstance))
                 {
                     scopedInstance = CreateAndNotify(descriptor, CreateByType(descriptor.ImplementationType, scope));
-                    scopedContainer.SetScopedInstance(descriptor, scopedInstance);
                 }
+                scopedContainer.SetScopedInstance(descriptor, scopedInstance);
                 return scopedInstance;
             }
 

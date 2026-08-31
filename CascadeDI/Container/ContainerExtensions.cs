@@ -1,168 +1,198 @@
 using System;
 using CascadeDI.Data;
+using CascadeDI.Descriptors;
 using CascadeDI.Descriptors.Impl;
 
 namespace CascadeDI.Container
 {
     public static class ContainerExtensions
     {
-        private static IContainer RegisterType(this IContainer container, Type service, Type implementation,
-            Lifetime lifetime, Action<object> onCreate = null)
+        private static TypeBasedServiceDescriptor RegisterType(this IContainer container, Type service, Type implementation, Lifetime lifetime)
         {
             var descriptor = new TypeBasedServiceDescriptor()
             {
                 ImplementationType = implementation,
                 Lifetime = lifetime,
-                ServiceType = service,
-                OnCreate = onCreate
+                ServiceType = service
             };
             container.Register(descriptor);
-            return container;
+            return descriptor;
         }
 
-        private static IContainer RegisterFactory(this IContainer container, Type type,
-            Func<IScope, object> factory, Lifetime lifetime, Action<object> onCreate = null)
+        private static FactoryBasedServiceDescriptor RegisterFactory(this IContainer container, Type type,
+            Func<IScope, object> factory, Lifetime lifetime)
         {
             var descriptor = new FactoryBasedServiceDescriptor()
             {
                 Factory = factory,
                 Lifetime = lifetime,
-                ServiceType = type,
-                OnCreate = onCreate
+                ServiceType = type
             };
             container.Register(descriptor);
-            return container;
+            return descriptor;
         }
 
-        private static IContainer RegisterInstance(this IContainer container, Type type, object instance,
-            Action<object> onCreate = null)
+        private static InstanceBasedServiceDescriptor RegisterInstance(this IContainer container, Type type, object instance)
         {
-            var descriptor = new InstanceBasedServiceDescriptor(type, instance)
-            {
-                OnCreate = onCreate
-            };
+            var descriptor = new InstanceBasedServiceDescriptor(type, instance);
             container.Register(descriptor);
-            return container;
+            return descriptor;
         }
 
         #region ByType
 
-        public static IContainer RegisterSingleton(
+        public static IRegistrationResult<object> RegisterSingleton(
             this IContainer container,
             Type @serviceInterface,
-            Type serviceImplementation,
-            Action<object> onCreate = null)
-            => container.RegisterType(serviceInterface, serviceImplementation, Lifetime.Singleton, onCreate);
+            Type serviceImplementation)
+        {
+            var descriptor = container.RegisterType(serviceInterface, serviceImplementation, Lifetime.Singleton);
+            return new RegistrationResult<object>(container, descriptor);
+        }
 
-        public static IContainer RegisterSingletonFor(this IContainer container, Type implementation,
-            Action<object> onCreate, params Type[] serviceTypes)
+        public static IRegistrationResult<object> RegisterSingletonFor(this IContainer container, Type implementation, params Type[] serviceTypes)
         {
             if (implementation == null) throw new ArgumentNullException(nameof(implementation));
             if (serviceTypes == null || serviceTypes.Length == 0)
                 throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
 
-            foreach (var service in serviceTypes)
-                container.RegisterType(service, implementation, Lifetime.Singleton, onCreate);
+            var descriptors = new ServiceDescriptor[serviceTypes.Length];
+            for (int i = 0; i < serviceTypes.Length; i++)
+                descriptors[i] = container.RegisterType(serviceTypes[i], implementation, Lifetime.Singleton);
 
-            return container;
+            return new RegistrationResult<object>(container, descriptors);
         }
 
-        public static IContainer RegisterSingletonFor(this IContainer container, Type implementation, params Type[] serviceTypes)
-            => container.RegisterSingletonFor(implementation, null, serviceTypes);
-
-        public static IContainer RegisterTransient(
+        public static IRegistrationResult<object> RegisterTransient(
             this IContainer container,
             Type @serviceInterface,
-            Type serviceImplementation,
-            Action<object> onCreate = null)
-            => container.RegisterType(serviceInterface, serviceImplementation, Lifetime.Transient, onCreate);
+            Type serviceImplementation)
+        {
+            var descriptor = container.RegisterType(serviceInterface, serviceImplementation, Lifetime.Transient);
+            return new RegistrationResult<object>(container, descriptor);
+        }
 
-        public static IContainer RegisterTransientFor(this IContainer container, Type implementation,
-            Action<object> onCreate, params Type[] serviceTypes)
+        public static IRegistrationResult<object> RegisterTransientFor(this IContainer container, Type implementation, params Type[] serviceTypes)
         {
             if (implementation == null) throw new ArgumentNullException(nameof(implementation));
             if (serviceTypes == null || serviceTypes.Length == 0)
                 throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
 
-            foreach (var service in serviceTypes)
-                container.RegisterType(service, implementation, Lifetime.Transient, onCreate);
+            var descriptors = new ServiceDescriptor[serviceTypes.Length];
+            for (int i = 0; i < serviceTypes.Length; i++)
+                descriptors[i] = container.RegisterType(serviceTypes[i], implementation, Lifetime.Transient);
 
-            return container;
+            return new RegistrationResult<object>(container, descriptors);
         }
 
-        public static IContainer RegisterTransientFor(this IContainer container, Type implementation, params Type[] serviceTypes)
-            => container.RegisterTransientFor(implementation, null, serviceTypes);
-
-        public static IContainer RegisterScoped(
+        public static IRegistrationResult<object> RegisterScoped(
             this IContainer container,
             Type @serviceInterface,
-            Type serviceImplementation,
-            Action<object> onCreate = null)
-            => container.RegisterType(serviceInterface, serviceImplementation, Lifetime.Scoped, onCreate);
+            Type serviceImplementation)
+        {
+            var descriptor = container.RegisterType(serviceInterface, serviceImplementation, Lifetime.Scoped);
+            return new RegistrationResult<object>(container, descriptor);
+        }
 
         #endregion
 
         #region ByTypeGeneric
 
-        public static IContainer RegisterSingleton<TInterface, TImplementation>(
-            this IContainer container, Action<TImplementation> onCreate = null)
-            => container.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Singleton, Wrap(onCreate));
+        public static IRegistrationResult<TImplementation> RegisterSingleton<TInterface, TImplementation>(
+            this IContainer container)
+        {
+            var descriptor = container.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Singleton);
+            return new RegistrationResult<TImplementation>(container, descriptor);
+        }
 
-        public static IContainer RegisterTransient<TInterface, TImplementation>(
-            this IContainer container, Action<TImplementation> onCreate = null)
-            => container.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Transient, Wrap(onCreate));
+        public static IRegistrationResult<TImplementation> RegisterTransient<TInterface, TImplementation>(
+            this IContainer container)
+        {
+            var descriptor = container.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Transient);
+            return new RegistrationResult<TImplementation>(container, descriptor);
+        }
 
-        public static IContainer RegisterScoped<TInterface, TImplementation>(
-            this IContainer container, Action<TImplementation> onCreate = null)
-            => container.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Scoped, Wrap(onCreate));
+        public static IRegistrationResult<TImplementation> RegisterScoped<TInterface, TImplementation>(
+            this IContainer container)
+        {
+            var descriptor = container.RegisterType(typeof(TInterface), typeof(TImplementation), Lifetime.Scoped);
+            return new RegistrationResult<TImplementation>(container, descriptor);
+        }
 
-        public static IContainer RegisterSingleton<TImplementation>(this IContainer container, Action<TImplementation> onCreate = null)
-            => container.RegisterType(typeof(TImplementation), typeof(TImplementation), Lifetime.Singleton, Wrap(onCreate));
+        public static IRegistrationResult<TImplementation> RegisterSingleton<TImplementation>(this IContainer container)
+        {
+            var descriptor = container.RegisterType(typeof(TImplementation), typeof(TImplementation), Lifetime.Singleton);
+            return new RegistrationResult<TImplementation>(container, descriptor);
+        }
 
-        public static IContainer RegisterSingletonFor<TImplementation>(this IContainer container, Action<TImplementation> onCreate, params Type[] serviceTypes)
-            => container.RegisterSingletonFor(typeof(TImplementation), Wrap(onCreate), serviceTypes);
+        public static IRegistrationResult<TImplementation> RegisterSingletonFor<TImplementation>(this IContainer container, params Type[] serviceTypes)
+        {
+            if (serviceTypes == null || serviceTypes.Length == 0)
+                throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
 
-        public static IContainer RegisterSingletonFor<TImplementation>(this IContainer container, params Type[] serviceTypes)
-            => container.RegisterSingletonFor(typeof(TImplementation), null, serviceTypes);
+            var implementation = typeof(TImplementation);
+            var descriptors = new ServiceDescriptor[serviceTypes.Length];
+            for (int i = 0; i < serviceTypes.Length; i++)
+                descriptors[i] = container.RegisterType(serviceTypes[i], implementation, Lifetime.Singleton);
 
-        public static IContainer RegisterTransientFor<TImplementation>(this IContainer container, Action<TImplementation> onCreate, params Type[] serviceTypes)
-            => container.RegisterTransientFor(typeof(TImplementation), Wrap(onCreate), serviceTypes);
+            return new RegistrationResult<TImplementation>(container, descriptors);
+        }
 
-        public static IContainer RegisterTransientFor<TImplementation>(this IContainer container, params Type[] serviceTypes)
-            => container.RegisterTransientFor(typeof(TImplementation), null, serviceTypes);
+        public static IRegistrationResult<TImplementation> RegisterTransientFor<TImplementation>(this IContainer container, params Type[] serviceTypes)
+        {
+            if (serviceTypes == null || serviceTypes.Length == 0)
+                throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
+
+            var implementation = typeof(TImplementation);
+            var descriptors = new ServiceDescriptor[serviceTypes.Length];
+            for (int i = 0; i < serviceTypes.Length; i++)
+                descriptors[i] = container.RegisterType(serviceTypes[i], implementation, Lifetime.Transient);
+
+            return new RegistrationResult<TImplementation>(container, descriptors);
+        }
+
+        #endregion
+
+        #region Fluent
+
+        public static IRegistrationBuilder<TImplementation> Register<TImplementation>(this IContainer container)
+            => new RegistrationBuilder<TImplementation>(container, typeof(TImplementation));
+
+        public static IRegistrationBuilder<object> Register(this IContainer container, Type implementationType)
+            => new RegistrationBuilder<object>(container, implementationType);
 
         #endregion
 
         #region ByInstance
 
-        public static IContainer RegisterSingleton(
+        public static IRegistrationResult<object> RegisterSingleton(
             this IContainer container,
-            Type type, object instance, Action<object> onCreate = null)
-            => container.RegisterInstance(type, instance, onCreate);
+            Type type, object instance)
+        {
+            var descriptor = container.RegisterInstance(type, instance);
+            return new RegistrationResult<object>(container, descriptor);
+        }
 
-        public static IContainer RegisterSingleton<T>(
+        public static IRegistrationResult<T> RegisterSingleton<T>(
             this IContainer container,
-            object instance, Action<T> onCreate = null)
-            => container.RegisterInstance(typeof(T), instance, Wrap(onCreate));
+            object instance)
+        {
+            var descriptor = container.RegisterInstance(typeof(T), instance);
+            return new RegistrationResult<T>(container, descriptor);
+        }
 
-        public static IContainer RegisterSingletonFor(this IContainer container, object instance,
-            Action<object> onCreate, params Type[] serviceTypes)
+        public static IRegistrationResult<object> RegisterSingletonFor(this IContainer container, object instance, params Type[] serviceTypes)
         {
             if (serviceTypes == null || serviceTypes.Length == 0)
                 throw new ArgumentException("At least one service type must be provided", nameof(serviceTypes));
 
-            foreach (var service in serviceTypes)
-                container.RegisterInstance(service, instance, onCreate);
+            var descriptors = new ServiceDescriptor[serviceTypes.Length];
+            for (int i = 0; i < serviceTypes.Length; i++)
+                descriptors[i] = container.RegisterInstance(serviceTypes[i], instance);
 
-            return container;
+            return new RegistrationResult<object>(container, descriptors);
         }
 
-        public static IContainer RegisterSingletonFor(this IContainer container, object instance, params Type[] serviceTypes)
-            => container.RegisterSingletonFor(instance, null, serviceTypes);
-
         #endregion
-
-        private static Action<object> Wrap<T>(Action<T> onCreate)
-            => onCreate == null ? null : instance => onCreate((T)instance);
     }
 }
