@@ -41,6 +41,7 @@ namespace CascadeDI.Container
 
         private readonly Dictionary<Type, List<ServiceDescriptor>> _descriptors = new ();
         private readonly Dictionary<ServiceDescriptor, object> _singletonInstances = new ();
+        private readonly HashSet<ServiceDescriptor> _onCreateNotified = new ();
         private readonly Container _parent;
 
         public Container(Container parent = null)
@@ -98,10 +99,11 @@ namespace CascadeDI.Container
             switch (descriptor)
             {
                 case InstanceBasedServiceDescriptor instanceDescriptor:
+                    NotifyOnCreateOnce(instanceDescriptor, instanceDescriptor.Instance);
                     return instanceDescriptor.Instance;
 
                 case FactoryBasedServiceDescriptor factoryDescriptor:
-                    return ResolveWithLifetime(factoryDescriptor, scope, () => factoryDescriptor.Factory(scope));
+                    return ResolveWithLifetime(factoryDescriptor, scope, () => CreateAndNotify(factoryDescriptor, factoryDescriptor.Factory(scope)));
 
                 case TypeBasedServiceDescriptor typeDescriptor:
                     return ResolveTypeBasedInstance(typeDescriptor, scope);
@@ -149,7 +151,7 @@ namespace CascadeDI.Container
                     .FirstOrDefault();
                 if (instance == null)
                 {
-                    instance = CreateByType(descriptor.ImplementationType, scope);
+                    instance = CreateAndNotify(descriptor, CreateByType(descriptor.ImplementationType, scope));
                     _singletonInstances[descriptor] = instance;
                 }
                 return instance;
@@ -159,13 +161,28 @@ namespace CascadeDI.Container
             {
                 if (!scopedContainer.TryGetScopedInstance(descriptor, out var scopedInstance))
                 {
-                    scopedInstance = CreateByType(descriptor.ImplementationType, scope);
+                    scopedInstance = CreateAndNotify(descriptor, CreateByType(descriptor.ImplementationType, scope));
                     scopedContainer.SetScopedInstance(descriptor, scopedInstance);
                 }
                 return scopedInstance;
             }
 
-            return CreateByType(descriptor.ImplementationType, scope);
+            return CreateAndNotify(descriptor, CreateByType(descriptor.ImplementationType, scope));
+        }
+
+        private object CreateAndNotify(ServiceDescriptor descriptor, object instance)
+        {
+            descriptor.OnCreate?.Invoke(instance);
+            return instance;
+        }
+
+        private void NotifyOnCreateOnce(ServiceDescriptor descriptor, object instance)
+        {
+            if (descriptor.OnCreate == null)
+                return;
+
+            if (_onCreateNotified.Add(descriptor))
+                descriptor.OnCreate(instance);
         }
 
         private object CreateByType(Type implementation, IScope scope)

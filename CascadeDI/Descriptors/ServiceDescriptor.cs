@@ -7,6 +7,7 @@ namespace CascadeDI.Descriptors
     {
         public Type ServiceType { get; set; }
         public Lifetime Lifetime { get; set; }
+        public Action<object> OnCreate { get; set; }
     }
 }
 
