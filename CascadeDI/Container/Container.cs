@@ -98,13 +98,13 @@ namespace CascadeDI.Container
 
         private object CreateCollectionInstance(Type elementType, IScope scope, bool collectParentDescriptors)
         {
-            var descriptors = GetDescriptorsFor(elementType, collectParentDescriptors);
-
             var listType = typeof(List<>).MakeGenericType(elementType);
             var list = (IList)Activator.CreateInstance(listType);
 
-            foreach (var descriptor in descriptors)
-                list.Add(ResolveInstance(descriptor, scope));
+            // Each descriptor is resolved by the container that registered it: a parent singleton in the collection
+            // is the parent's instance, the same one a single-service resolve returns, not a copy cached in this child.
+            foreach (var (owner, descriptor) in GetDescriptorsFor(elementType, collectParentDescriptors))
+                list.Add(owner.ResolveInstance(descriptor, scope));
 
             return list;
         }
@@ -240,11 +240,12 @@ namespace CascadeDI.Container
             return new Container(this);
         }
 
-        internal List<ServiceDescriptor> GetDescriptorsFor(Type serviceType, bool includeParent)
+        /// <summary>Descriptors of the service in this container and, if asked, its ancestors, each with its owner.</summary>
+        internal List<(Container Owner, ServiceDescriptor Descriptor)> GetDescriptorsFor(Type serviceType, bool includeParent)
         {
-            var result = new List<ServiceDescriptor>();
+            var result = new List<(Container, ServiceDescriptor)>();
             if (_descriptors != null && _descriptors.TryGetValue(serviceType, out var list))
-                result.AddRange(list);
+                result.AddRange(list.Select(descriptor => (this, descriptor)));
             if (_parent != null && includeParent)
                 result.AddRange(_parent.GetDescriptorsFor(serviceType, true));
             return result;
